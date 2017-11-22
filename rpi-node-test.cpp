@@ -33,7 +33,7 @@ inline void assertExpected(int val,int expected) {
 //    printf("Error received; errmsg: %s\n", strerror(errno));
 //  }
   if (val != expected) {
-    printf("Unexpected value: %02x; expected %02x\n", val, expected);
+//    printf("Unexpected value: %02x; expected %02x\n", val, expected);
     //shutdownI2C();
     //exit(-1);
   }
@@ -62,6 +62,9 @@ int main(void)
   }
   printf("INFO: fd: %d\n", fd);
 
+  printf("INFO: sleeping for 5s\n");
+  usleep(5l*1000000l);
+  
   int b;
   for (;;) {
     int sleep_us = 100; 
@@ -70,7 +73,7 @@ int main(void)
     printf("Byte 0: %02x\n",b);
     assertExpected(b, 0xde);
     usleep(sleep_us);
-    
+
     b = wiringPiI2CRead(fd);
     printf("Byte 1: %02x\n",b);
     assertExpected(b, 0xad);
@@ -89,5 +92,6 @@ int main(void)
     sleep_us = 10*1000; // 10ms
     usleep(sleep_us);
   }
+
 }
 
