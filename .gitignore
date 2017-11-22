@@ -1,5 +1,7 @@
+*~
 *.d
 *.eep
 *.hex
 *.elf
 *.o
+rpi-node-test

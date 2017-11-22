@@ -18,16 +18,18 @@ address = 0x12
 
 # Pin Definitons:
 
-#Pullup management is not necessary no RPI (it has them on-board)
-# BusPullupPin = 17 # Broadcom pin 17 (P1 pin 11)
+#I2C Bus enable management 
+BusEnablePin = 27 # Broadcom pin 27 (P1 pin 13)
 
 SDAPin = 2 # Broadcom pin 2 (P1 pin 3)
 SDLPin = 3 # Broadcom pin 3 (P1 pin 5)
 
-#When I want the I2C bus to be active, enable BusPullupPin as output and drive HIGH
-#(That pin is serving as VCC for the 4.7K pullup resistors.  This is so that I
-# can disable it (set the pin HiZ) when the mcu needs those same pins for ISP)
+#When I want the I2C bus to be active, enable BusEnablePin as output and drive HIGH
+#(That pin is latching the SDA/SDL line to the ATTiny (since those pins are shared
+# by ISP).
 #Similarly, when disabled, set SDAPin and SDLPin as HiZ for the same reason.
+#
+#Note pullups aren't needed on RPI as they are builtin on the board
 
 
 def readSample(mux):
@@ -48,7 +50,7 @@ def nowstr():
 
 
 def shutdown():
-    #GPIO.setup(BusPullupPin, GPIO.IN)
+    GPIO.setup(BusEnablePin, GPIO.IN)
     bus.close()
     GPIO.setup(SDAPin, GPIO.IN)
     GPIO.setup(SDLPin, GPIO.IN)
@@ -65,8 +67,8 @@ def sysexception(t,e,tb):
 # Pin Setup:
 GPIO.setwarnings(False)
 GPIO.setmode(GPIO.BCM) # Broadcom pin-numbering scheme
-#GPIO.setup(BusPullupPin, GPIO.OUT)
-#GPIO.output(BusPullupPin, GPIO.HIGH)
+GPIO.setup(BusEnablePin, GPIO.OUT)
+GPIO.output(BusEnablePin, GPIO.HIGH)
 
 print nowstr(), "True2Air I2C Tester started"
 
@@ -74,8 +76,17 @@ sys.excepthook = sysexception
 
 # get device info
 cmd_info = 0x01
-bus.read_byte_data(address, cmd_info)
+while True:
+    time.sleep(0.1)
+    print nowstr(), "Byte 1: ",bus.read_byte_data(address, 1)
+    time.sleep(0.1)
+    print nowstr(), "Byte 1: ",bus.read_byte_data(address, 1)
+    time.sleep(0.1)
+    print nowstr(), "Byte 1: ",bus.read_byte_data(address, 1)
+    time.sleep(0.1)
+    print nowstr(), "Byte 1: ",bus.read_byte_data(address, 1)
+
 #bus.write_i2c_block_data( address, cmd_info )
-    
+
 
 shutdown()
