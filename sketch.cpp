@@ -22,7 +22,6 @@ void setup() {
 }
 
 void loop() {
-    digitalWrite(0, LOW);
   sw.loop();
 }
 
