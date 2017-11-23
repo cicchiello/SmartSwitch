@@ -14,7 +14,7 @@
  * ATtiny Pin 3  = (PB1) unused                     ATtiny Pin 4 = pgrm XRST
  * ATtiny Pin 5  = (PB2) unused                     ATtiny Pin 6  = (PA7) unused
  * ATtiny Pin 7  = I2C SDA & pgrm MOSI              ATtiny Pin 8  = pgrm MISO
- * ATtiny Pin 9  = I2C SCL & pgrm SCK               ATtiny Pin 10 = (PA3) unused
+ * ATtiny Pin 9  = I2C SCL & pgrm SCK               ATtiny Pin 10 = PA3 Switch input (pullup)
  * ATtiny Pin 11 = (PA2) unused                     ATtiny Pin 12 = DEBUG_LED1
  * ATtiny Pin 13 = DEBUG_LED2                       ATtiny Pin 14 = GND
  * 
@@ -27,7 +27,6 @@
 
 #include <Arduino.h>
 
-#define CFG_ATTINY84 1
 #include "SmartSwitch.h"
 
 //JFC: sample code from contiki t2a example appears to start in master mode -- I think
@@ -69,23 +68,45 @@ volatile byte busIsActive = 0;
 static void receiveEvent(uint8_t howMany);
 static void requestEvent();
 static void blink(byte led, byte times);
+static void blink(volatile byte &port, byte mask, byte times);
 static void halt(byte led, byte times);
 
-#ifdef CFG_ATTINY84
-#define DEBUG_LED1_PIN   1               // ATtiny84 Pin 12
-#define DEBUG_LED2_PIN   0               // ATtiny84 Pin 13
+#if defined(__AVR_ATtiny84__)
+#define DEBUG_LED1_APIN  1               // ATtiny84 PA1 Pin 12
+#define DEBUG_LED1_PORT  PORTA
+#define DEBUG_LED1_PIN   PINA
+#define DEBUG_LED1_MASK  0b00000010
+#define DEBUG_LED2_APIN  0               // ATtiny84 PA0 Pin 13
+#define DEBUG_LED2_PORT  PORTA
+#define DEBUG_LED2_PIN   PINA
+#define DEBUG_LED2_MASK  0b00000001
 #define SDA_PIN          6               // ATtiny84 Pin 7
-#define SCL_PIN          4               // ATtiny84 Pin 9
-#endif
-#ifdef CFG_ATTINY85
-#define DEBUG_LED1_PIN   4               // ATtiny85 Pin 3
-#define DEBUG_LED2_PIN   1               // ATtiny85 pin 6
-#define SDA_PIN          0               // ATtiny85 pin 5
-#define SCL_PIN          2               // ATtiny85 pin 7
+#define SCL_APIN         4               // ATtiny84 PA4 Pin 9
+#define SCL_PIN          PINA
+#define SCL_MASK         0b00010000
+#define SWITCH_APIN      3               // ATtiny84 PA3 Pin 10
+#define SWITCH_PIN       PINA
+#define SWITCH_PORT      PORTA
+#define SWITCH_MASK      0b00001000
 #endif
 
-#define HALT() halt(DEBUG_LED2_PIN,0)
-#define HALT(x) halt(DEBUG_LED2_PIN,x)
+#if defined(__AVR_ATtiny85__)
+#define DEBUG_LED1_APIN  4               // ATtiny85 PB4 Pin 3
+#define DEBUG_LED1_PORT  PORTB
+#define DEBUG_LED1_PIN   PINB
+#define DEBUG_LED1_MASK  0b00010000
+#define DEBUG_LED2_APIN  1               // ATtiny85 PB1 pin 6
+#define DEBUG_LED2_PORT  PORTB
+#define DEBUG_LED2_PIN  PINB
+#define DEBUG_LED2_MASK  0b00000010
+#define SDA_PIN          0               // ATtiny85 pin 5
+#define SCL_APIN         2               // ATtiny85 PB2 pin 7
+#define SCL_PIN          PINB
+#define SCL_MASK         0b00000100
+#endif
+
+#define HALT() halt(DEBUG_LED2_APIN,0)
+#define HALT(x) halt(DEBUG_LED2_APIN,x)
 
 
 byte STATE = GET_SENSACT_NUM;
@@ -113,36 +134,42 @@ sensact_descriptor_t sensors[] = {
 unsigned char device_addr[] = {0xde, 0xad, 0xbe, 0xef};
 
 
-inline void BUS_ACTIVE() {
-  busAct_ms = millis();
+inline void BUS_ACTIVE(unsigned int ms) {
+  busAct_ms = ms;
   busIsActive = 1;
-  digitalWrite(DEBUG_LED1_PIN, LOW);
+  DEBUG_LED1_PORT &= ~DEBUG_LED1_MASK;
 }
 
 inline void BUS_INACTIVE() {
   busIsActive = 0;
-  digitalWrite(DEBUG_LED1_PIN, HIGH);
+  DEBUG_LED1_PORT |= DEBUG_LED1_MASK;
 }
 
 void receiveEventNoop(uint8_t howMany) {}
 void requestEventNoop() {}
 
 void SmartSwitch::setup() {
-  pinMode(DEBUG_LED1_PIN,OUTPUT);        // for general DEBUG use
-  pinMode(DEBUG_LED2_PIN,OUTPUT);        // for general HALT use
-  pinMode(SCL_PIN, INPUT); 
+  pinMode(DEBUG_LED1_APIN,OUTPUT);        // for general DEBUG use
+  pinMode(DEBUG_LED2_APIN,OUTPUT);        // for general HALT use
+  pinMode(SCL_APIN, INPUT);
+  pinMode(SWITCH_APIN, INPUT);
+  digitalWrite(SWITCH_APIN, HIGH);        // enable pullup
 
-  digitalWrite(DEBUG_LED1_PIN,HIGH);     // make sure LEDs start out off
-  digitalWrite(DEBUG_LED2_PIN,HIGH);
+  digitalWrite(DEBUG_LED1_APIN,HIGH);     // make sure LEDs start out off
+  digitalWrite(DEBUG_LED2_APIN,HIGH);
 
-  blink(DEBUG_LED1_PIN,6);               // show we're alive
+  while ((digitalRead(SCL_APIN) == 0) || (digitalRead(SDA_PIN) == 0)) {
+    // waiting for both i2c lines to be high -- indicating live bus (though not necessarily active/available)
+    delay(125);
+    DEBUG_LED1_PORT &= ~DEBUG_LED1_MASK;
+    delay(125);
+    DEBUG_LED1_PORT |= DEBUG_LED1_MASK;
+  }
+  BUS_ACTIVE(millis());
+  
+  blink(DEBUG_LED1_PORT, DEBUG_LED1_MASK, 6); // show we're alive
   delay(1500);                           // pause for 1.5 seconds (NOTE: can't use delay beyond here!)
 
-  while ((digitalRead(SCL_PIN) == 0) || (digitalRead(SDA_PIN) == 0)) {
-    // waiting for both i2c lines to be high -- indicating live bus (though not necessarily active/available)
-  }
-  BUS_ACTIVE();
-  
   TinyWireS.begin(0x12);      // init I2C Slave mode
   TinyWireS.onReceive(receiveEvent);
   TinyWireS.onRequest(requestEvent);
@@ -150,14 +177,17 @@ void SmartSwitch::setup() {
 
 bool triggered = true;
 void SmartSwitch::loop() {
-  if (digitalRead(SCL_PIN) == 0) {
-    BUS_ACTIVE();
+#ifdef FOO
+  byte scl = SCL_PIN&SCL_MASK;
+  if (scl == 0) {
+    BUS_ACTIVE(millis());
   } else if (busIsActive) {
     if (millis() - busAct_ms > BUS_INACTIVITY_MS) {
       BUS_INACTIVE();
     }
   }
-    
+#endif
+  
   TinyWireS_stop_check();
   if (triggered) return;
     /**
@@ -168,7 +198,7 @@ void SmartSwitch::loop() {
 
      if (reg_position != 0) {
        triggered = true;
-//       halt(DEBUG_LED1_PIN, reg_position);
+//       halt(DEBUG_LED1_APIN, reg_position);
 //        HALT(10);
         unsigned char cmd = i2c_regs[0];
         switch(cmd) {
@@ -198,7 +228,7 @@ void SmartSwitch::loop() {
  */
 static void requestEvent()
 {  
-//halt(DEBUG_LED2_PIN, 8);
+//halt(DEBUG_LED2_APIN, 8);
     TinyWireS.send(i2c_regs[reg_position]);
     // Increment the reg position on each read, and loop back to zero
     reg_position++;
@@ -233,9 +263,11 @@ static void receiveEvent(uint8_t howMany)
     if (!howMany)
     {
         // This write was only to set the buffer for next read
+        if (reg_position == 1)
+	  i2c_regs[1] = SWITCH_PIN&SWITCH_MASK ? 1 : 0;
         return;
     }
-//halt(DEBUG_LED2_PIN,5);
+//halt(DEBUG_LED2_APIN,5);
     while(howMany--)
     {
         i2c_regs[reg_position] = TinyWireS.receive();
@@ -308,6 +340,16 @@ static void blink(byte led, byte times){ // poor man's display
     digitalWrite(led,LOW);
     tws_delay(275);
     digitalWrite(led,HIGH);
+    tws_delay(275);
+  }
+}
+
+
+static void blink(volatile byte &port, byte mask, byte times){ // poor man's display
+  for (byte i=0; i< times; i++){
+    port &= ~mask;
+    tws_delay(275);
+    port |= mask;
     tws_delay(275);
   }
 }
