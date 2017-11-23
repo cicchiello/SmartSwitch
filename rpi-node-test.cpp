@@ -69,27 +69,27 @@ int main(void)
   for (;;) {
     int sleep_us = 100; 
     
-    b = wiringPiI2CRead(fd);
+    b = wiringPiI2CReadReg8(fd,1);
     printf("Byte 0: %02x\n",b);
     assertExpected(b, 0xde);
     usleep(sleep_us);
 
-    b = wiringPiI2CRead(fd);
+    b = wiringPiI2CReadReg8(fd,1);
     printf("Byte 1: %02x\n",b);
     assertExpected(b, 0xad);
     usleep(sleep_us);
 
-    b = wiringPiI2CRead(fd);
+    b = wiringPiI2CReadReg8(fd,1);
     printf("Byte 2: %02x\n",b);
     assertExpected(b, 0xbe);
     usleep(sleep_us);
 
-    b = wiringPiI2CRead(fd);
+    b = wiringPiI2CReadReg8(fd,1);
     printf("Byte 3: %02x\n",b);
     assertExpected(b, 0xef);
     usleep(sleep_us);
 
-    sleep_us = 10*1000; // 10ms
+    sleep_us = 1*1000; // 1ms
     usleep(sleep_us);
   }
 
